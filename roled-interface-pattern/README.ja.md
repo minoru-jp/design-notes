@@ -33,12 +33,12 @@
 ファクトリ関数を2階層に分けて実装しています。一階層目の_create_*_allはロールとして構造化された複数のインターフェース(_*Constantと_*Stateは定数、内部状態のゲッター)を返します。  
 テストなどはこの各インターフェースに対して行うことができます。
 
-### 実装の構造(重要!これはパターンの構造を説明するための疑似コードです):
+### 実装の構造(疑似コード):
 ```python
 from abc import ABC, abstractmethod
 from typing import Protocol, ClassVar
 
-* = インターフェース名
+" * = インターフェース名
 
 class *(ABC):
     __slots__ = ()
