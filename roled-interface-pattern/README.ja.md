@@ -38,7 +38,7 @@
 from abc import ABC, abstractmethod
 from typing import Protocol, ClassVar
 
-" * = インターフェース名
+# * = インターフェース名
 
 class *(ABC):
     __slots__ = ()
