@@ -2,8 +2,6 @@
 
 This repository collects design patterns and structural ideas currently under development.
 
-test
-
 ## Contents
 
 ### Roled Interface Pattern
