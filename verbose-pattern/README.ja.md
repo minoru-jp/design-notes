@@ -35,7 +35,10 @@
 
 ### 実装の構造(疑似コード):
 ```python
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from enum import Enum, auto
 from typing import Protocol
 from dataclasses import dataclass
 
@@ -50,12 +53,14 @@ class *(ABC):
 
 class _*Constant(Protocol):
     # ファクトリ関数内で使用する定数群を定義したインターフェース
-    CONSTANT: str
+    GREET_IN_MORNING: str
+    GREET_IN_AFTERNOON: str
 
 
 class _*State(Protocol):
     # 可変内部状態にアクセスするためのインターフェース
-    internal_state: str
+    init_state: str
+    meridiem: Meridiem
 
 
 class _*Core(Protocol):
@@ -67,59 +72,101 @@ class _*Core(Protocol):
         ...
     def init_process_c(self) -> None:
         ...
-    def initialize() -> None:
+    def initialize(self) -> None:
         ...
 
-class _*Bridge(Protocol):
-    # 関連のある実体へ機能の一部を渡すためのインターフェース
+# _*+Bridge(Protocol): # + = 委譲内容に応じたインターフェース名
+# 関連のある実体へ機能の一部を渡すためのインターフェース
+# 内容(権限)によって複数に分けることで派生する実体の分類を行う。
 
-    def is_initialized() -> bool:
+class _*ReaderBridge(Protocol):
+    # Readerは初期化状態と現在のMeridiemを参照する
+    def is_initialized(self) -> bool:
+        ...
+    def current_meridiem(self) -> Meridiem:
         ...
 
-def _create_*_all() -> tuple[*, _*Constant, _*State, _*Core, _*Bridge]:　# 1
+class _*UpdaterBridge(_*ReaderBridge, Protocol):
+    # Updaterは午前と午後を切り替える
+    # Updaterは同時に_*ReaderBrdigeの機能も使用できる(_*ReaderBridgeの継承)
+    def toggle_meridiem(self) -> None:
+        ...
+
+class Meridiem(Enum):
+    AM = auto()
+    NOON = auto()
+    PM = auto()
+    MIDNIGHT = auto()
+
+def _create_*_all() -> tuple[*, _*Constant, _*State, _*Core, _*Bridge]: # 1
     # この疑似コード中では_create_*_all()はすべてのインターフェースを返していますが、
     # _*Constant、_*State、_*Core, _*Bridgeは存在しない場合があります。*は必ず存在します。
     # 特に_*Coreが存在しないのはファクトリ関数への引数のみで初期化の完了と同義になる場合です。
 
     @dataclass(slots = True) # 2, 3
     class _Constant(_*Constant):
-        CONSTANT: str = "value"
+        GREET_IN_MORNING: str = "good morning!!"
+        GREET_IN_AFTERNOON: str = "good afternoon!!"
     constant = _Constant()
     
     @dataclass(slots = True)
     class _State(_*State):
-        internal_state: str = "not initialized"
+        init_state: str = "not initialized"
+        meridiem: Meridiem = Meridiem.NOON
     state = _State() # 4
 
     class _Core(_*Core):
         __slots__ = ()
         def init_process_a(self) -> None:
-            state.internal_state = "start initialization"
+            state.init_state = "start initialization"
         def init_process_b(self) -> None:
-            state.internal_state = "initialization is still in progress"
+            state.init_state = "initialization is still in progress"
         def init_process_c(self) -> None:
-            state.internal_state = "initialized"
-        def initialize(self):
+            state.init_state = "initialized"
+            state.meridiem = Meridiem.AM
+        def initialize(self) -> None:
             self.init_process_a()
             self.init_process_b()
             self.init_process_c()
-            
     core = _Core()
 
-    class _Bridge(_*Bridge):
+    class _ReaderBridge(_*ReaderBridge):
         __slots__ = ()
-        def is_initialized(self):
-            return state.internal_state == "initialized"
-    bridge = _Bridge()
+        def is_initialized(self) -> bool:
+            return state.init_state == "initialized"
+        def current_meridiem(self) -> Meridiem:
+            return state.meridiem
+    reader_bridge = _ReaderBridge()
+
+    class _UpdaterBridge(_*UpdaterBridge):
+        __slots__ = ()
+        def is_initialized(self) -> bool: # 5
+            return reader_bridge.is_initialized()
+        def current_meridiem(self) -> Meridiem:
+            return reader_bridge.current_meridiem()
+        def toggle_meridiem(self) -> None:
+            meridiem = state.meridiem
+            if meridiem is Meridiem.AM:
+                state.meridiem = Meridiem.PM
+            elif meridiem is Meridiem.PM:
+                state.meridiem = Meridiem.AM
+            else:
+                raise RuntimeError("Bug")
+    updater_bridge = _UpdaterBridge()
 
     class _Interface(*):
         __slots__ = ()
         def greet(self):
-            message = 'good morning!' if state.internal_state == 'initialized' else 'zzz...'
-            print(message)
+            meridiem = state.meridiem
+            if meridiem is Meridiem.AM:
+                print(constant.GREET_IN_MORNING)
+            elif meridiem is Meridiem.PM:
+                print(constant.GREET_IN_AFTERNOON)
+            else:
+                print("... (If you see this message, please contact support.)")
     interface = _Interface()
 
-    return (interface, constant, state, core, bridge)
+    return (interface, constant, state, core, reader_bridge, updater_bridge)
 
 def create_*() -> *:
     roles = _create_*_all()
@@ -134,6 +181,7 @@ def create_*() -> *:
 2.  _Constantは実装中の定数へのアクセスを他のインターフェースと一貫性を保つためインスタンス化していますが必ず必要なことではありません。
 3. また、_Constantはfrozenを設定していないdataclassとして定義しています。これは定数群をテスト時に変更する必要がある場合に有効です。その必要がない場合、frozenを設定することで実装における不意の書き換えが防止され安全性は向上します。
 4. stateは自由に書き換えられるため、テスト時に任意の状態を作ることができます。
+5. _*+Bridige(Protocol)は簡単のため継承を用いてインターフェースを定義ています。しかし、実装ではコンポジションを用いて行うこともできます。これも任意であり、継承とコンポジションどちらも選択することができます。
 
 ### 補足
 - 疑似コード中でインターフェースの実装のすべてに__slots__を定義していますが、これは任意です。(インターフェースに不意な状態が注入されるのを防ぐためにしていますが、これは好みで、完全な任意です。)
