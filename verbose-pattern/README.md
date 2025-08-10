@@ -4,47 +4,40 @@
 
 The term **"Verbose Pattern"** is an informal name used in this document to describe the structure. It does not correspond to any formal recognized design pattern.
 
-This structure shares some conceptual similarities with the following design patterns and principles:
+This structure is related to the following design patterns and principles:
 
 * **Factory Pattern**: Delegating object creation to dedicated functions
 * **Interface Segregation Principle**: Separating interfaces by role
 * **Facade Pattern**: Hiding internal complexity behind a simplified interface
 * **Strategy Pattern**: Separating behavior based on roles
 
-This pattern is designed with a two-layer factory function structure to support step-by-step testing and modular development. It’s especially suited for *long-lived, low-volume, fundamental components* that require structured and maintainable implementation.
-
----
+This pattern is defined by splitting the factory function into two layers, enabling step-by-step operation checks and testing for each processing unit. It is intended for *long-lived, low-volume, fundamental components* that require structured and maintainable implementation.
 
 ## Key Features
 
-* Clearly separates external interfaces from internal/test-time interfaces.
-* Enables expression of a *defined but not yet meaningfully initialized* state, making incremental testing of the initialization process easier.
-* Interfaces are grouped by role, so each aspect of the system can be tested independently.
-* Introducing a `_Bridge` interface allows for structured delegation between factory functions.
-* Only the necessary interfaces are exposed, so code size tends to grow proportionally with complexity.
-
----
+* Clearly separates external-facing interfaces from internal/test-time interfaces.
+* Enables the representation of a *defined but not yet meaningfully initialized* state, making it easier to perform incremental testing of initialization processes.
+* Interfaces are defined by role, allowing independent testing of each component, making it easy to set the granularity of tests.
+* The introduction of a \_\*Bridge interface allows the structured delegation of functionality from one factory function to another.
+* By adopting only the necessary interfaces, the code size grows in proportion to the complexity.
 
 ## Notes
 
 * This pattern does not enable anything fundamentally new compared to standard class instances.
-* The same goals can also be achieved using regular class-based implementations.
-* However, one general characteristic of closures is that the internal state referenced by external interfaces is not easily accessible. As a result, the risk of unintended access to internal state tends to be lower than with class instances. That said, this is not unique to this pattern—it applies more broadly to any interface exposed through factory functions.
-* What this pattern emphasizes is the prioritization of structural clarity over brevity, even at the cost of some redundancy in implementation.
-
----
+* The goals attempted with this pattern can also be achieved using regular class instances.
+* However, a general characteristic of closures is that the internal state referenced by external interfaces is not easily accessible. As a result, the risk of unintended access to internal state is lower than with class instances. But this is not unique to this pattern; it applies to any interface exposed through factory functions.
+* The primary focus of this pattern is to prioritize the structural clarity of the implementation, even at the cost of some redundancy.
 
 ## Implementation Overview
 
-This pattern uses two layers of factory functions. The first layer, `_create_*_all()`, returns a tuple of interfaces organized by role.
-These include interfaces like `_ * Constant` and `_ * State`, representing constants and internal state accessors respectively.
-Each interface can be independently tested.
+The pattern uses two layers of factory functions. The first layer, `_create_*_all()`, returns a tuple of interfaces organized by role. These include interfaces like `_Constant` and `_State`, representing constants and internal state accessors, respectively. Each interface can be independently tested.
 
 ### Structure Overview (Pseudo-code):
 
 ```python
 from abc import ABC, abstractmethod
-from typing import Protocol, ClassVar
+from typing import Protocol
+from dataclasses import dataclass
 
 # * = Interface name
 
@@ -64,34 +57,32 @@ class _*State(Protocol):
     internal_state: str
 
 class _*Core(Protocol):
-    # Internal-use-only methods. 
+    # Internal-use-only methods
     # 'initialize()' is callable from the outside to trigger initialization.
     def init_process_a(self) -> None: ...
     def init_process_b(self) -> None: ...
     def init_process_c(self) -> None: ...
-    def initialize() -> None:
-        ...
+    def initialize() -> None: ...
 
 class _*Bridge(Protocol):
-    # An interface for delegating part of the functionality to related entities
+    # An interface for delegating functionality to related entities
     def is_initialized() -> bool: ...
 
-def _create_*_all() -> tuple[*, _*Constant, _*State, _*Core, _*Bridge]:
-    # This function returns all role-based interfaces.
-    # Some roles (like _*Core or _*Bridge) may not be needed, depending on the use case.
-    # The * interface (public) is always present.
+def _create_*_all() -> tuple[*, _*Constant, _*State, _*Core, _*Bridge]:  # 1
+    # In this pseudo-code, _create_*_all() returns all interfaces, 
+    # but _*Constant, _*State, _*Core, and _*Bridge may not be present. 
+    # The * interface is always present.
+    # Specifically, _*Core might not exist if initialization is assumed to be done through function arguments.
 
+    @dataclass(slots=True)  # 2, 3
     class _Constant(_*Constant):
-        __slots__ = ('CONSTANT',)
-        def __init__(self):
-            self.CONSTANT = "value"
+        CONSTANT: str = "value"
     constant = _Constant()
-    
+
+    @dataclass(slots=True)
     class _State(_*State):
-        __slots__ = ('internal_state',)
-        def __init__(self):
-            self.internal_state = "not initialized"
-    state = _State()
+        internal_state: str = "not initialized"
+    state = _State()  # 4
 
     class _Core(_*Core):
         __slots__ = ()
@@ -105,6 +96,7 @@ def _create_*_all() -> tuple[*, _*Constant, _*State, _*Core, _*Bridge]:
             self.init_process_a()
             self.init_process_b()
             self.init_process_c()
+
     core = _Core()
 
     class _Bridge(_*Bridge):
@@ -123,23 +115,22 @@ def _create_*_all() -> tuple[*, _*Constant, _*State, _*Core, _*Bridge]:
     return (interface, constant, state, core, bridge)
 
 def create_*() -> *:
-    roles = _create_*_all(...)
+    roles = _create_*_all()
     core = roles[3]
     core.initialize()
     interface = roles[0]
     return interface
 ```
 
-* The actual factory function names use `snake_case`.
-* Since the `state` interface allows direct mutation, it can be used in tests to simulate any internal condition.
+1. Factory function names (such as *Interface name*) are written in snake\_case.
+2. The `_Constant` class is instantiated to maintain consistency with other interfaces, though this is not strictly required.
+3. The `_Constant` class is defined as a dataclass without the `frozen` attribute. This allows for modifications to constants during testing, but setting `frozen` would prevent accidental changes, increasing safety.
+4. The `state` is mutable, allowing any desired state to be created during testing.
 
----
+### Additional Notes
 
-## Additional Notes
-
-* `__slots__` is used in each implementation to prevent unintended attribute injection, but it's optional and a matter of preference.
-* All interfaces could technically be implemented as classes without instance creation. However, this would require metaclasses to use `__slots__`, or `@classmethod` methods. For simplicity, we use class instances here.
-* If you're targeting lightweight, high-volume instances, it might be worth switching to class-based interfaces to reduce instantiation overhead.
-* We use `Protocol` for internal interfaces to keep things lightweight and avoid boilerplate decorators, though `ABC` could also be used throughout.
-
-
+* In the pseudo-code, `__slots__` is defined for all interface implementations, but this is optional. (This is done to prevent accidental state injection into the interfaces, but it is a matter of preference.)
+* Related to the previous point, all interfaces could be implemented as classes without the need for instantiation. However, doing so would require metaclasses to use `__slots__` or `@classmethod` methods, so for simplicity, all are instantiated. This choice is a matter of implementation preference, and either approach can be used as long as it accurately expresses the interface.
+* When adopting this pattern for lightweight, high-volume instances, it might be worth considering using classes for all interfaces to eliminate the need for instantiating them.
+* Overall, the structure might seem somewhat verbose, but this redundancy is aimed at preserving incremental testing and static type checking.
+* Although all interfaces could be implemented with `ABC`, `Protocol` is used for internal interfaces to avoid boilerplate decorators. These choices can be adjusted according to the developer's preference or needs.

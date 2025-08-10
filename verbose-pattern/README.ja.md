@@ -36,7 +36,8 @@
 ### 実装の構造(疑似コード):
 ```python
 from abc import ABC, abstractmethod
-from typing import Protocol, ClassVar
+from typing import Protocol
+from dataclasses import dataclass
 
 # * = インターフェース名
 
@@ -75,22 +76,20 @@ class _*Bridge(Protocol):
     def is_initialized() -> bool:
         ...
 
-def _create_*_all() -> tuple[*, _*Constant, _*State, _*Core, _*Bridge]:
+def _create_*_all() -> tuple[*, _*Constant, _*State, _*Core, _*Bridge]:　# 1
     # この疑似コード中では_create_*_all()はすべてのインターフェースを返していますが、
     # _*Constant、_*State、_*Core, _*Bridgeは存在しない場合があります。*は必ず存在します。
     # 特に_*Coreが存在しないのはファクトリ関数への引数のみで初期化の完了と同義になる場合です。
 
+    @dataclass(slots = True) # 2, 3
     class _Constant(_*Constant):
-        __slots__ = ('CONSTANT',)
-        def __init__(self):
-            self.CONSTANT = "value"
+        CONSTANT: str = "value"
     constant = _Constant()
     
+    @dataclass(slots = True)
     class _State(_*State):
-        __slots__ = ('some_state',)
-        def __init__(self):
-            self.internal_state = "not initialized"
-    state = _State()
+        internal_state: str = "not initialized"
+    state = _State() # 4
 
     class _Core(_*Core):
         __slots__ = ()
@@ -123,7 +122,7 @@ def _create_*_all() -> tuple[*, _*Constant, _*State, _*Core, _*Bridge]:
     return (interface, constant, state, core, bridge)
 
 def create_*() -> *:
-    roles = _create_*_all(...)
+    roles = _create_*_all()
     core = roles[3]
     core.initialize()
     interface = roles[0]
@@ -131,8 +130,10 @@ def create_*() -> *:
 
 ```
 
-- ファクトリ関数の*はスネークケースで記されています。
-- stateは自由に書き換えられるため、テスト時に任意の状態を作ることができます。
+1. ファクトリ関数名の*(インターフェース名)はスネークケースで記されます。
+2.  _Constantは実装中の定数へのアクセスを他のインターフェースと一貫性を保つためインスタンス化していますが必ず必要なことではありません。
+3. また、_Constantはfrozenを設定していないdataclassとして定義しています。これは定数群をテスト時に変更する必要がある場合に有効です。その必要がない場合、frozenを設定することで実装における不意の書き換えが防止され安全性は向上します。
+4. stateは自由に書き換えられるため、テスト時に任意の状態を作ることができます。
 
 ### 補足
 - 疑似コード中でインターフェースの実装のすべてに__slots__を定義していますが、これは任意です。(インターフェースに不意な状態が注入されるのを防ぐためにしていますが、これは好みで、完全な任意です。)
