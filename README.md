@@ -10,4 +10,4 @@ This repository collects design patterns and structural ideas currently under de
 - [日本語](./verbose-pattern/README.ja.md) — 長寿命・低トラフィックな基盤的構造のための設計パターン
 
 #### Usage Example
-- [standman.policy](https://github.com/minoru-jp/standman/blob/main/standman/policy.py)
+- [fport.policy](https://github.com/minoru-jp/fport/blob/main/src/fport/policy.py)
